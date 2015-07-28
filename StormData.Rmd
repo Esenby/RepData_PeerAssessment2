@@ -1,0 +1,307 @@
+---
+title: "ClimaticEffects-PA2"
+author: "SNB"
+date: "Sunday, July 25, 2015"
+output: 
+  html_document:
+    keep_md: yes
+---
+#Effect of Storms on Costs of Casualties and Material Damage across the USA, 1950-2011.
+
+##SYNOPSIS
+This analysis is addressed to city, county or state planners, responsible for including health support and 
+property protection measures in their budgets. It is a preliminary survey of the effect of the ten most significant 
+climatic factors on human and material damage across the nation and over the 6 decades. 
+An illustration is given of how the database may be used to extract more detailed and particular information about 
+the particular locality or time zone for the relevant climatic dangers. 
+An analysis of the trend over time in these parameters is beyond the scope of present report.
+
+**References:** 
+
+1)  Database:       [National Oceanic and Atomospheric Authority](https://d396qusza40orc.cloudfront.net/repdata%2fdata%2fstormdata.csv.bz2 )
+
+2)  Documentations: [National Weather Service Storm Data Documentation](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf )
+
+3)  FAQ:            [National Climatic Data Center Storm Events FAQ](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2FNCDC Storm Events-FAQ Page.pdf)
+
+
+##DATA COLLECTION
+
+Reading the data (for the second time after examining for inconsistencies:
+
+```{r}
+StormData<-read.csv(bzfile("repdata-data-StormData.csv.bz2","rt"),header=TRUE, na.strings=c("","+","?","-"), stringsAsFactors=FALSE)
+```
+**Summarising the data:**
+
+```{r}
+dim(StormData)
+names(StormData)
+head(StormData)
+str(StormData)
+summary(StormData)
+summary(as.factor(StormData$TIME_ZONE))
+summary(as.factor(StormData$EVTYPE))
+summary(as.factor(StormData$PROPDMGEXP))
+summary(as.factor(StormData$CROPDMGEXP))
+summary(as.factor(StormData$TIME_ZONE))
+```
+
+##DATA PROCESSING
+
+**DATA EXTRACTION**
+
+Extracting the relevant data (10 columns taken from the original database) :
+    The data BGN_DATA(column 2), time zone TIME_ZONE (column 4)state STATE (column 7), 
+    event type EVTYPE (column 8), fatalities FATALITIES (column 23), injuries INJURIES (column 24),
+    property damage PROPDMG (column 25), the corresponding dollar units PROPDMGEXP (column 26),
+    crop damage CROPDMG (column 27) and the corresponding dollar units CROPDMGEXP (column 28)
+    The LATITUDE and LONGITUDE data (columns 32,33) are also included, 
+    in case these were more useful parameters than the time zone.
+    
+```{r}    
+sdata <- StormData[,c(2,4,7,8,23,24,25,26,27,28,32,33)]
+len   <-length(StormData$EVTYPE)
+
+```
+**INITIALISING with the required packets in R:**
+
+```{r}
+library(stringr)
+library(ggplot2)
+library(lattice)
+library(dplyr)
+```
+**CLEANING up some observed anomalies in the EVTYPE data (no doubt many more to be found under "others"):**
+
+```{r}
+
+sdata$EVTYPE <- sapply(sdata$EVTYPE, function(x) toupper(x))
+sdata$EVTYPE[sdata$EVTYPE=="AVALANCE"] <- "AVALANCHE"
+sdata$EVTYPE[sdata$EVTYPE=="COASTALSTORM"] <- "COASTAL STORM"
+
+```
+
+###PROCESSING OF CASUALTY DATA
+
+**PREPARING SUMMARIES OF CASUALTIES**
+
+Forming tables of non-zero casualties
+```{r}
+casualties <- select(sdata, TIME_ZONE,EVTYPE, FATALITIES, INJURIES)
+casualties <- filter(casualties, FATALITIES !=0 | INJURIES !=0)
+lcas <-length(casualties$EVTYPE)
+
+cat("There are a total of ",lcas, " non-zero records of casualties.")
+```
+
+**ARRANGING the death, injury and total casualty data by type of weather event and the time zone**
+
+```{r}
+LossAsCasualties <- group_by(casualties, EVTYPE, TIME_ZONE) %>%
+                    summarize(Fatalities = sum(FATALITIES, na.rm=TRUE),
+                              Injuries = sum(INJURIES, na.rm=TRUE),
+                              TotalCasualties = Fatalities + Injuries)
+```
+**COMPRESSING the casualty data to the national plane:**
+```{r}
+
+LAC <-group_by(LossAsCasualties,EVTYPE)%>%
+      summarise(National_Deaths= sum(Fatalities), 
+                National_Injuries=sum(Injuries), 
+                National_Casualties=sum(TotalCasualties))
+LACd <-arrange(LAC,desc(National_Deaths))
+LACi <-arrange(LAC,desc(National_Injuries))
+LACt <-arrange(LAC,desc(National_Casualties))
+Death_shortlist<-head(LACd,10)
+Injuries_shortlist<-head(LACi,10)
+Casualties_shortlist<-head(LACt,10)
+                
+```
+
+
+##RESULTS FOR CASUALTIES on the national plane
+
+
+The data on the human losses as deaths and injuries are produced in the following table and  barplots:
+
+**National Statistics on Principle Causes of Deaths - 1950-2011**
+```{r}
+Death_shortlist
+```
+**National Statistics on Principle Causes of Injuries - 1950-2011**
+```{r}
+Injuries_shortlist
+```
+**National Statistics on Principle Causes of Caualties - 1950-2011**
+```{r}
+Casualties_shortlist
+
+par(mfrow=c(1,3), mar = c(15,4,6,1), cex=0.75)
+
+barplot(Death_shortlist$National_Deaths, las=3, names.arg = Death_shortlist$EVTYPE,
+        ylab="All deaths",col="red")
+barplot(Injuries_shortlist$National_Injuries, las=3, names.arg = Injuries_shortlist$EVTYPE,
+        main="The ten main causes of \ndeaths and injuries \nacross USA - 1950-2011",
+        ylab="All injuries", col="orange")
+barplot(Casualties_shortlist$National_Casualties, las=3, names.arg = Casualties_shortlist$EVTYPE,
+        ylab="All casualties", col="black")
+        
+```
+
+
+###PROCESSING OF MATERIAL LOSS DATA
+
+**PREPARING SUMMARIES OF MATERIAL DAMAGE (property and crop damage)**
+
+Forming tables of non-zero damage
+```{r}
+damages <- select(sdata, TIME_ZONE,EVTYPE, PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP)
+damages <- filter(damages, PROPDMG !=0 | CROPDMG !=0)
+damages$PROPDMGEXP <- sapply(damages$PROPDMGEXP, function(x) toupper(x))
+damages$CROPDMGEXP <- sapply(damages$CROPDMGEXP, function(x) toupper(x))
+ldam <-length(damages$EVTYPE)
+
+cat("There are a total of ", ldam, "non-zero records of material costs")
+```
+
+**CONVERTING costs to the common unit, million dollars.**
+```{r}
+summary(as.factor(damages$PROPDMGEXP))
+summary(as.factor(damages$CROPDMGEXP))
+
+damages$PROPDMGEXP[damages$PROPDMGEXP=="H"] <- "2"
+damages$PROPDMGEXP[damages$PROPDMGEXP=="K"] <- "3"
+damages$PROPDMGEXP[damages$PROPDMGEXP=="M"] <- "6"
+damages$PROPDMGEXP[damages$PROPDMGEXP=="B"] <- "9"
+damages$CROPDMGEXP[damages$CROPDMGEXP=="K"] <- "3"
+damages$CROPDMGEXP[damages$CROPDMGEXP=="M"] <- "6"
+damages$CROPDMGEXP[damages$CROPDMGEXP=="B"] <- "9"
+
+summary(as.factor(damages$PROPDMGEXP))
+summary(as.factor(damages$CROPDMGEXP))
+
+damages$PROPDMGEXP <- as.integer(damages$PROPDMGEXP)
+damages$CROPDMGEXP <- as.integer(damages$CROPDMGEXP)
+
+damages$PROPDMG <- damages$PROPDMG * 10**(damages$PROPDMGEXP-6)
+damages$CROPDMG <- damages$CROPDMG * 10**(damages$CROPDMGEXP-6)
+
+summary(damages$PROPDMG)
+summary(damages$CROPDMG)
+
+```
+**ARRANGING the property, crop and total material loss data by type of weather event and the time zone**
+
+```{r}
+LossAsDamages <- group_by(damages, EVTYPE, TIME_ZONE) %>%
+                    summarize(PropertyDamages = sum(PROPDMG, na.rm=TRUE),
+                              CropDamages = sum(CROPDMG, na.rm=TRUE),
+                              TotalDamages = PropertyDamages + CropDamages)
+```
+**COMPRESSING the damages data to the national plane:**
+```{r}
+
+LAD <-group_by(LossAsDamages,EVTYPE)%>%
+      summarise(Property_Loss = sum(PropertyDamages), 
+                Crop_Loss=sum(CropDamages), 
+                Damages=sum(TotalDamages))
+LADP <-arrange(LAD,desc(Property_Loss))
+LADC <-arrange(LAD,desc(Crop_Loss))
+LADT <-arrange(LAD,desc(Damages))
+Property_shortlist<-head(LADP,10)
+Crop_shortlist<-head(LADC,10)
+Damages_shortlist<-head(LADT,10)
+                
+```
+
+##RESULTS FOR MATERIAL LOSSES on the national plane
+
+The data on the material damages as property and crops losses are produced in the following table and  barplots:
+
+**National Statistics on Principle Causes of Property Damages - 1950-2011**
+```{r}
+Property_shortlist
+```
+**National Statistics on Principle Causes of Crop Damages - 1950-2011**
+```{r}
+Crop_shortlist
+```
+**National Statistics on Principle Causes of Material Losses - 1950-2011**
+```{r}
+Damages_shortlist
+
+par(mfrow=c(1,3), mar = c(15,4,6,1), cex=0.75)
+
+barplot(Property_shortlist$Property_Loss, las=3, names.arg = Property_shortlist$EVTYPE,
+        ylab="All property losses", col="blue")
+barplot(Crop_shortlist$Crop_Loss, las=3, names.arg = Crop_shortlist$EVTYPE,
+        main="The ten main factors \naffecting economic loss \nacross USA - 1950-2011 \n(million dollars)",
+        ylab="All rop losses",col="green")
+barplot(Damages_shortlist$Damages, las=3, names.arg = Damages_shortlist$EVTYPE,
+        ylab="All material losses",col="brown")
+        
+```
+
+
+##PROCESSING of data for the MAJOR CLIMATIC FACTORS affecting casualities and damages for selected TIME ZONES
+
+###Investigating the patterns over time zones for the six main climatic events
+
+```{r}
+casualties_timezone<-filter(LossAsCasualties,EVTYPE=="TYPHOON"|EVTYPE== "FLOOD"|EVTYPE=="TORNADO"|EVTYPE=="DROUGHT"|EVTYPE=="EXCESSIVE HEAT")
+damages_timezone   <-filter(LossAsDamages,EVTYPE=="TYPHOON"|EVTYPE== "FLOOD"|EVTYPE=="TORNADO"|EVTYPE=="DROUGHT"|EVTYPE=="EXCESSIVE HEAT")
+head(casualties_timezone, 40)
+summary(as.factor(casualties_timezone$TIME_ZONE))
+head(damages_timezone, 40)
+summary(as.factor(damages_timezone$TIME_ZONE))
+```
+
+###Selecting the maximum number of time zones to give enough data for comparison
+
+```{r}
+casualties_4zones<-filter(casualties_timezone,TIME_ZONE=="PST"|TIME_ZONE=="CST"|TIME_ZONE=="MST"|TIME_ZONE=="EST")
+damages_3zones<-filter(damages_timezone,TIME_ZONE=="PST"|TIME_ZONE=="CST"|TIME_ZONE=="EST")
+
+head(casualties_4zones,20)
+head(damages_3zones,20)
+casualties_4zones <- casualties_4zones[2:13,]
+damages_3zones <- damages_3zones[1:12,]
+```
+
+##RESULTS for the selected major climatic events for a few time zones
+
+```{r}
+head(casualties_4zones,20)
+head(damages_3zones,20)
+
+par(mar=c(8,3,8,1))
+damages_3zones$TIME_ZONE    <- as.factor(damages_3zones$TIME_ZONE)
+
+barchart(TotalDamages~EVTYPE | TIME_ZONE, damages_3zones,layout=c(2,2),col = c("orange","red","blue","black"),
+                                main="Example: Damage across 3 time zones for 4 strong climatic events",
+                                scales=list(x=list(cex=0.45)))
+
+```
+
+
+##CONCLUSION
+
+As can be seen, by far the most prominent cause of death and injuries as registered over the whole of USA 
+between 1959 and 2011 is associated with tornados, while other factors such as flood and heat related events are of the same 
+order of magnitude. 
+
+On the other hand in the same period across the nation, floods have almost doubled the economic damage to property 
+due to the other important factors, such as typhoon and tornados, and the pattern is the same for the overall material 
+damage. 
+
+In the case of crops, economic loss due to drought is double that due to floods and the other relevant climatic events, 
+but crop losses make up a smaller portion of the entire material damage costs.
+
+As is expected, the pattern of losses measured in human or economic terms depends on the time zone (or, more exactly, on the
+latitude and longitude) of the observations and varies appreciably from the national pattern.
+
+Whether the patterns over time are influenced by a real trend or by exceptional weather and climate effects can only
+be decided after grouping the data by year or decade, and is beyong the scope of this report.
+
+#http://rpubs.com/SNB/97741
