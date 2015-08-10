@@ -1,7 +1,7 @@
 ---
 title: "ClimaticEffects-PA2"
 author: "SNB"
-date: "Sunday, July 25, 2015"
+date: "August 10, 2015"
 output: 
   html_document:
     keep_md: yes
@@ -303,5 +303,3 @@ latitude and longitude) of the observations and varies appreciably from the nati
 
 Whether the patterns over time are influenced by a real trend or by exceptional weather and climate effects can only
 be decided after grouping the data by year or decade, and is beyong the scope of this report.
-
-#http://rpubs.com/SNB/97741

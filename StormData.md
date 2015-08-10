@@ -1,6 +1,6 @@
 # ClimaticEffects-PA2
 SNB  
-Sunday, July 25, 2015  
+August 10, 2015  
 #Effect of Storms on Costs of Casualties and Material Damage across the USA, 1950-2011.
 
 ##SYNOPSIS
